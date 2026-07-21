@@ -104,13 +104,25 @@ def yolo_label_lines(prediction_record: dict[str, Any]) -> list[str]:
         box_height = y2 - y1
         if box_width <= 0 or box_height <= 0:
             raise ValueError(f"Prediction has an empty bounding box: {prediction_record['file_name']}")
-        center_x = (x1 + x2) / 2 / width
-        center_y = (y1 + y2) / 2 / height
+        center_x, box_width = serialized_yolo_axis((x1 + x2) / 2 / width, box_width / width)
+        center_y, box_height = serialized_yolo_axis((y1 + y2) / 2 / height, box_height / height)
         lines.append(
             f"{YOLO_CLASS_IDS[category]} {center_x:.6f} {center_y:.6f} "
-            f"{box_width / width:.6f} {box_height / height:.6f}"
+            f"{box_width:.6f} {box_height:.6f}"
         )
     return lines
+
+
+def serialized_yolo_axis(center: float, span: float) -> tuple[float, float]:
+    """Round one YOLO axis without allowing serialized edges outside [0, 1]."""
+    rounded_center = round(center, 6)
+    rounded_span = round(span, 6)
+    precision_step = 0.000001
+    while rounded_center - rounded_span / 2 < 0 or rounded_center + rounded_span / 2 > 1:
+        rounded_span = round(rounded_span - precision_step, 6)
+        if rounded_span <= 0:
+            raise ValueError("YOLO box became empty after serialization")
+    return rounded_center, rounded_span
 
 
 def validate_input_records(

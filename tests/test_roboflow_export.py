@@ -19,6 +19,18 @@ def test_yolo_label_lines_normalize_and_clip_boxes() -> None:
     assert lines == ["0 0.250000 0.600000 0.500000 0.800000"]
 
 
+def test_yolo_label_lines_remain_in_bounds_after_serialization() -> None:
+    lines = yolo_label_lines({
+        "file_name": "frame.jpg",
+        "width": 1000,
+        "height": 1000,
+        "detections": [{"category": "right_hand", "bbox_xyxy": [868.447, 100, 1000, 900]}],
+    })
+
+    _, center_x, _, box_width, _ = lines[0].split()
+    assert float(center_x) + float(box_width) / 2 <= 1.0
+
+
 def test_export_creates_complete_yolo_import_folder(tmp_path: Path) -> None:
     frames_dir = tmp_path / "frames"
     frames_dir.mkdir()
