@@ -5,8 +5,11 @@ description = "Local tooling for building a head-left hand detection dataset fro
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "dill>=0.3.8",
+    "numpy>=2.0.0",
     "protobuf>=5.0.0",
     "typer>=0.12.0",
+    "ultralytics>=8.4.0",
     "zstandard>=0.23.0",
 ]
 

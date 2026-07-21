@@ -17,8 +17,57 @@ from hand_benchmark.config import (
 )
 from hand_benchmark.dataset import extract_frames as extract_dataset_frames
 from hand_benchmark.dataset import export_head_left_videos
+from hand_benchmark.config import (
+    DEFAULT_MODEL_DIR,
+    DEFAULT_PREDICTIONS_PATH,
+    DEFAULT_WILOR_CONFIDENCE,
+    DEFAULT_WILOR_DETECTOR_METADATA_PATH,
+    DEFAULT_WILOR_DETECTOR_PATH,
+)
+from hand_benchmark.wilor import download_wilor_detector, predict_wilor_frames
 
 app = typer.Typer(help="Build a raw head-left hand detection corpus from MCAP recordings.")
+
+
+@app.command("download-wilor-detector")
+def download_wilor_detector_command(
+    detector_path: Annotated[Path, typer.Option(help="Ignored path for WiLoR detector.pt.")] = DEFAULT_WILOR_DETECTOR_PATH,
+    metadata_path: Annotated[Path, typer.Option(help="Ignored model provenance JSON path.")] = DEFAULT_WILOR_DETECTOR_METADATA_PATH,
+    overwrite: Annotated[bool, typer.Option(help="Replace an existing detector weight file.")] = False,
+) -> None:
+    """Download the upstream WiLoR left/right hand detector with provenance."""
+    try:
+        result = download_wilor_detector(detector_path, metadata_path, overwrite)
+    except (FileExistsError, OSError) as error:
+        raise typer.BadParameter(str(error)) from error
+    typer.echo(f"WiLoR detector: {result.detector_path}")
+    typer.echo(f"SHA-256: {result.sha256}")
+
+
+@app.command("predict-hands")
+def predict_hands_command(
+    frames_dir: Annotated[Path, typer.Option(help="Directory containing extracted frame images.")] = DEFAULT_FRAMES_DIR,
+    metadata_path: Annotated[Path, typer.Option(help="Frame provenance JSONL path.")] = DEFAULT_FRAME_METADATA_PATH,
+    detector_path: Annotated[Path, typer.Option(help="Local WiLoR detector.pt path.")] = DEFAULT_WILOR_DETECTOR_PATH,
+    output_path: Annotated[Path, typer.Option(help="Ignored JSONL path for raw pre-labels.")] = DEFAULT_PREDICTIONS_PATH,
+    confidence: Annotated[float, typer.Option(min=0.0, max=1.0, help="Detector confidence threshold.")] = DEFAULT_WILOR_CONFIDENCE,
+    device: Annotated[str, typer.Option(help="Inference device: auto, cpu, cuda, or mps.")] = "auto",
+    batch_size: Annotated[int, typer.Option(min=1, help="Number of frames per YOLO inference batch.")] = 8,
+    limit: Annotated[int | None, typer.Option(min=1, help="Only process the first N frames for a smoke run.")] = None,
+    preview_dir: Annotated[Path | None, typer.Option(help="Optional annotated-preview directory.")] = None,
+    max_previews: Annotated[int, typer.Option(min=0, help="Maximum preview images to write.")] = 20,
+) -> None:
+    """Run the WiLoR detector on extracted frames and write left/right pre-labels."""
+    try:
+        image_count, detection_count, preview_count = predict_wilor_frames(
+            frames_dir, metadata_path, detector_path, output_path, confidence, device,
+            batch_size, limit, preview_dir, max_previews,
+        )
+    except (ImportError, OSError, RuntimeError, ValueError) as error:
+        raise typer.BadParameter(str(error)) from error
+    typer.echo(f"Wrote {detection_count} detections for {image_count} frames to {output_path}")
+    if preview_count:
+        typer.echo(f"Preview images: {preview_count} in {preview_dir}")
 
 
 @app.command("export-head-left-videos")
