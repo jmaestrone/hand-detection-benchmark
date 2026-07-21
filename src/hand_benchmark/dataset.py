@@ -13,8 +13,8 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Iterable
 
-from hand_detection_benchmark.config import HEAD_LEFT_VIDEO_TOPIC
-from hand_detection_benchmark.mcap_video import VideoExportResult, export_video_topic
+from hand_benchmark.config import HEAD_LEFT_VIDEO_TOPIC
+from hand_benchmark.mcap_video import VideoExportResult, export_video_topic
 
 SUPPORTED_IMAGE_FORMATS = {"jpg", "jpeg", "png"}
 

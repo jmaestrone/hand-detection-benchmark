@@ -8,15 +8,15 @@ from typing import Annotated
 
 import typer
 
-from hand_detection_benchmark.config import (
+from hand_benchmark.config import (
     DEFAULT_FRAME_FPS,
     DEFAULT_FRAME_METADATA_PATH,
     DEFAULT_FRAMES_DIR,
     DEFAULT_VIDEO_DIR,
     DEFAULT_VIDEO_METADATA_PATH,
 )
-from hand_detection_benchmark.dataset import extract_frames as extract_dataset_frames
-from hand_detection_benchmark.dataset import export_head_left_videos
+from hand_benchmark.dataset import extract_frames as extract_dataset_frames
+from hand_benchmark.dataset import export_head_left_videos
 
 app = typer.Typer(help="Build a raw head-left hand detection corpus from MCAP recordings.")
 

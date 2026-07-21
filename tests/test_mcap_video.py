@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from hand_detection_benchmark import mcap_video
+from hand_benchmark import mcap_video
 
 
 def test_export_rejects_missing_topic(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

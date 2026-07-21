@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from hand_detection_benchmark.dataset import (
+from hand_benchmark.dataset import (
     VideoInfo,
     build_frame_file_name,
     extract_frames,
     iter_sample_points,
     video_provenance,
 )
-from hand_detection_benchmark.mcap_video import VideoExportResult
+from hand_benchmark.mcap_video import VideoExportResult
 
 
 def test_one_fps_sampling_uses_source_frame_times() -> None:
@@ -74,10 +74,10 @@ def test_frame_extraction_start_index_selects_a_later_video(tmp_path: Path, monk
         ) + "\n"
     )
     monkeypatch.setattr(
-        "hand_detection_benchmark.dataset.probe_video",
+        "hand_benchmark.dataset.probe_video",
         lambda path: VideoInfo(path, 10, 10, 1.0, 1.0, 1),
     )
-    monkeypatch.setattr("hand_detection_benchmark.dataset.extract_video_frames", lambda *args: None)
+    monkeypatch.setattr("hand_benchmark.dataset.extract_video_frames", lambda *args: None)
 
     video_count, frame_count = extract_frames(
         video_dir, video_dir / "metadata.jsonl", tmp_path / "frames", tmp_path / "frames.jsonl", start_index=1
