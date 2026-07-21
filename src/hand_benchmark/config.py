@@ -12,6 +12,7 @@ DEFAULT_MODEL_DIR = Path("models/wilor")
 DEFAULT_WILOR_DETECTOR_PATH = DEFAULT_MODEL_DIR / "detector.pt"
 DEFAULT_WILOR_DETECTOR_METADATA_PATH = DEFAULT_MODEL_DIR / "detector.metadata.json"
 DEFAULT_PREDICTIONS_PATH = Path("data/predictions/wilor-detector.jsonl")
+DEFAULT_ROBOFLOW_EXPORT_DIR = Path("data/roboflow-export/wilor-detector-yolo")
 DEFAULT_WILOR_DETECTOR_URL = (
     "https://huggingface.co/spaces/rolpotamias/WiLoR/resolve/main/"
     "pretrained_models/detector.pt"

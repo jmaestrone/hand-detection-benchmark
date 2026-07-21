@@ -3,7 +3,7 @@
 Local tooling for building a reproducible hand-detection corpus from the
 `/head_left/video` stream embedded in MCAP recordings. The first workflow
 exports cached MP4s and samples source-pixel frames; it does not select a model,
-create predictions, or integrate with Roboflow.
+create reviewed labels, or upload data to Roboflow.
 
 ## Setup
 
@@ -58,15 +58,13 @@ Use `--limit 1` on either command for a smoke run. Use a distinct output
 directory and `--fps 3` for any later denser corpus rather than overwriting this
 dataset identity.
 
-## Future annotation schema
+## Annotation schema
 
 When this corpus is pre-labeled and reviewed in Roboflow, use exactly these
 categories:
 
 - `left_hand`
 - `right_hand`
-
-The present repository does not choose a pre-labeling model or create labels.
 
 ## WiLoR detector pre-labels
 
@@ -81,3 +79,27 @@ uv run hand-benchmark predict-hands --limit 20 --preview-dir runs/previews/wilor
 Review the preview images before running the full corpus. `predict-hands` writes
 one JSONL row per extracted frame, including frames with no hands, and validates
 that the downloaded detector exposes the expected left/right class ordering.
+
+## Roboflow review export
+
+After reviewing the detector previews, create the complete import folder:
+
+```bash
+uv run hand-benchmark export-roboflow-yolo
+```
+
+This produces an ignored `data/roboflow-export/wilor-detector-yolo/` folder
+with `images/train/`, matching `labels/train/` YOLO files, `data.yaml`, and a
+provenance `manifest.jsonl`. Images are hard-linked to `data/frames/` when
+possible, so this does not duplicate the source pixels. It includes empty label
+files for frames with no WiLoR detections.
+
+Roboflow's CLI is appropriate for this 2,000+-image corpus:
+
+```bash
+roboflow import -w <workspace-id> -p <project-id> \
+  data/roboflow-export/wilor-detector-yolo
+```
+
+Create an Object Detection project with exactly `left_hand` and `right_hand`.
+Do not upload an earlier partial export alongside this full corpus.

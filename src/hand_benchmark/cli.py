@@ -20,13 +20,37 @@ from hand_benchmark.dataset import export_head_left_videos
 from hand_benchmark.config import (
     DEFAULT_MODEL_DIR,
     DEFAULT_PREDICTIONS_PATH,
+    DEFAULT_ROBOFLOW_EXPORT_DIR,
     DEFAULT_WILOR_CONFIDENCE,
     DEFAULT_WILOR_DETECTOR_METADATA_PATH,
     DEFAULT_WILOR_DETECTOR_PATH,
 )
 from hand_benchmark.wilor import download_wilor_detector, predict_wilor_frames
+from hand_benchmark.roboflow_export import export_roboflow_yolo
 
 app = typer.Typer(help="Build a raw head-left hand detection corpus from MCAP recordings.")
+
+
+@app.command("export-roboflow-yolo")
+def export_roboflow_yolo_command(
+    frames_dir: Annotated[Path, typer.Option(help="Directory containing extracted frame images.")] = DEFAULT_FRAMES_DIR,
+    frame_metadata_path: Annotated[Path, typer.Option(help="Frame provenance JSONL path.")] = DEFAULT_FRAME_METADATA_PATH,
+    predictions_path: Annotated[Path, typer.Option(help="WiLoR prediction JSONL path.")] = DEFAULT_PREDICTIONS_PATH,
+    output_dir: Annotated[Path, typer.Option(help="Ignored destination for the YOLO import folder.")] = DEFAULT_ROBOFLOW_EXPORT_DIR,
+    overwrite: Annotated[bool, typer.Option(help="Replace generated labels and manifest in an existing export.")] = False,
+) -> None:
+    """Export all frames and WiLoR pre-labels in Roboflow-importable YOLO format."""
+    try:
+        result = export_roboflow_yolo(
+            frames_dir, frame_metadata_path, predictions_path, output_dir, overwrite,
+        )
+    except (FileExistsError, OSError, ValueError) as error:
+        raise typer.BadParameter(str(error)) from error
+    typer.echo(
+        f"Exported {result.image_count} images and {result.detection_count} detections "
+        f"to {result.output_dir}"
+    )
+    typer.echo(f"Empty label files: {result.empty_label_count}")
 
 
 @app.command("download-wilor-detector")
