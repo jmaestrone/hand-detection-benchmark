@@ -1,0 +1,24 @@
+[project]
+name = "hand-detection-benchmark"
+version = "0.1.0"
+description = "Local tooling for building a head-left hand detection dataset from MCAP recordings."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "protobuf>=5.0.0",
+    "typer>=0.12.0",
+    "zstandard>=0.23.0",
+]
+
+[project.scripts]
+hand-benchmark = "hand_detection_benchmark.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hand_detection_benchmark"]
+
+[dependency-groups]
+dev = ["pytest>=8.0.0"]
