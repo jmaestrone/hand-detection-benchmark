@@ -67,3 +67,17 @@ categories:
 - `right_hand`
 
 The present repository does not choose a pre-labeling model or create labels.
+
+## WiLoR detector pre-labels
+
+The first pre-label candidate is WiLoR's upstream left/right YOLO detector. Its
+weights and all generated predictions remain ignored local artifacts:
+
+```bash
+uv run hand-benchmark download-wilor-detector
+uv run hand-benchmark predict-hands --limit 20 --preview-dir runs/previews/wilor
+```
+
+Review the preview images before running the full corpus. `predict-hands` writes
+one JSONL row per extracted frame, including frames with no hands, and validates
+that the downloaded detector exposes the expected left/right class ordering.
