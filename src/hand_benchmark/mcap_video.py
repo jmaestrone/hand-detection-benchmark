@@ -11,9 +11,10 @@ import shutil
 import statistics
 import struct
 import subprocess
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, BinaryIO, Iterable
+from typing import Any, BinaryIO
 
 MCAP_MAGIC = b"\x89MCAP0\r\n"
 COMPRESSED_VIDEO_SCHEMA = "foxglove.CompressedVideo"
@@ -110,23 +111,35 @@ def read_mcap_summary(path: Path) -> McapSummary:
                 channels[channel.channel_id] = channel
             elif opcode == 8:
                 chunk_indexes.append(_parse_chunk_index(data))
-    return McapSummary(path=path, schemas=schemas, channels=channels, chunk_indexes=chunk_indexes)
+    return McapSummary(
+        path=path, schemas=schemas, channels=channels, chunk_indexes=chunk_indexes
+    )
 
 
 def export_video_topic(
-    *, mcap_path: Path, output_video_path: Path, video_topic: str, overwrite: bool = False
+    *,
+    mcap_path: Path,
+    output_video_path: Path,
+    video_topic: str,
+    overwrite: bool = False,
 ) -> VideoExportResult:
     """Export a selected compressed-video topic to a decodable MP4 file."""
     summary = read_mcap_summary(mcap_path)
-    channel = next((item for item in summary.channels.values() if item.topic == video_topic), None)
+    channel = next(
+        (item for item in summary.channels.values() if item.topic == video_topic), None
+    )
     if channel is None:
         raise ValueError(f"Video topic not found in {mcap_path}: {video_topic}")
     schema = summary.schemas.get(channel.schema_id)
     if schema is None or schema.name != COMPRESSED_VIDEO_SCHEMA:
         actual_schema = schema.name if schema else "unknown"
-        raise ValueError(f"Expected {COMPRESSED_VIDEO_SCHEMA} for {video_topic}, got {actual_schema}")
+        raise ValueError(
+            f"Expected {COMPRESSED_VIDEO_SCHEMA} for {video_topic}, got {actual_schema}"
+        )
     if output_video_path.exists() and not overwrite:
-        raise FileExistsError(f"Output already exists; pass --overwrite: {output_video_path}")
+        raise FileExistsError(
+            f"Output already exists; pass --overwrite: {output_video_path}"
+        )
     ffmpeg_path = shutil.which("ffmpeg")
     if ffmpeg_path is None:
         raise RuntimeError("Extracting MP4 video requires ffmpeg on PATH.")
@@ -138,7 +151,9 @@ def export_video_topic(
             summary, channel, temporary_h264_path
         )
         average_fps = _estimate_fps(log_times)
-        _mux_h264(ffmpeg_path, temporary_h264_path, output_video_path, average_fps, overwrite)
+        _mux_h264(
+            ffmpeg_path, temporary_h264_path, output_video_path, average_fps, overwrite
+        )
     finally:
         temporary_h264_path.unlink(missing_ok=True)
 
@@ -151,16 +166,22 @@ def export_video_topic(
         time_range_sec=(timestamps[0], timestamps[-1]),
         average_fps=average_fps,
         format=video_format,
-        warnings=["Exported one selected MCAP camera stream; no rectification or multi-camera fusion was applied."],
+        warnings=[
+            "Exported one selected MCAP camera stream; no rectification or multi-camera fusion was applied."
+        ],
     )
 
 
 def _extract_h264_bitstream(
     summary: McapSummary, channel: McapChannel, temporary_h264_path: Path
 ) -> tuple[list[float], list[int], str | None, str]:
-    message_class = _protobuf_classes(summary.schemas).get(summary.schemas[channel.schema_id].name)
+    message_class = _protobuf_classes(summary.schemas).get(
+        summary.schemas[channel.schema_id].name
+    )
     if message_class is None:
-        raise RuntimeError(f"Could not build protobuf class for {summary.schemas[channel.schema_id].name}")
+        raise RuntimeError(
+            f"Could not build protobuf class for {summary.schemas[channel.schema_id].name}"
+        )
     timestamps: list[float] = []
     log_times: list[int] = []
     frame_id: str | None = None
@@ -200,7 +221,9 @@ def _protobuf_classes(schemas: dict[int, McapSchema]) -> dict[str, Any]:
             continue
         descriptor_set = descriptor_pb2.FileDescriptorSet()
         descriptor_set.ParseFromString(schema.data)
-        files_by_name.update({descriptor.name: descriptor for descriptor in descriptor_set.file})
+        files_by_name.update(
+            {descriptor.name: descriptor for descriptor in descriptor_set.file}
+        )
     ordered_files: list[Any] = []
     seen: set[str] = set()
 
@@ -218,11 +241,15 @@ def _protobuf_classes(schemas: dict[int, McapSchema]) -> dict[str, Any]:
     return message_factory.GetMessages(ordered_files)
 
 
-def _iter_channel_messages(summary: McapSummary, channel_id: int) -> Iterable[tuple[int, bytes]]:
+def _iter_channel_messages(
+    summary: McapSummary, channel_id: int
+) -> Iterable[tuple[int, bytes]]:
     for chunk_index in summary.chunk_indexes:
         if channel_id not in chunk_index.channel_offsets:
             continue
-        for message_channel_id, log_time_ns, payload in _iter_messages(_read_chunk(summary.path, chunk_index)):
+        for message_channel_id, log_time_ns, payload in _iter_messages(
+            _read_chunk(summary.path, chunk_index)
+        ):
             if message_channel_id == channel_id:
                 yield log_time_ns, payload
 
@@ -232,7 +259,9 @@ def _read_chunk(path: Path, chunk_index: McapChunkIndex) -> bytes:
         handle.seek(chunk_index.chunk_start_offset)
         record = _read_record(handle)
     if record is None or record[0] != 6:
-        raise ValueError(f"Expected MCAP chunk at offset {chunk_index.chunk_start_offset}")
+        raise ValueError(
+            f"Expected MCAP chunk at offset {chunk_index.chunk_start_offset}"
+        )
     data = record[1]
     offset = 0
     _, offset = _read_u64(data, offset)
@@ -246,12 +275,16 @@ def _read_chunk(path: Path, chunk_index: McapChunkIndex) -> bytes:
     if compression == "zstd":
         import zstandard
 
-        return zstandard.ZstdDecompressor().decompress(payload, max_output_size=uncompressed_size)
+        return zstandard.ZstdDecompressor().decompress(
+            payload, max_output_size=uncompressed_size
+        )
     if compression == "lz4":
         lz4_path = shutil.which("lz4")
         if lz4_path is None:
             raise RuntimeError("MCAP uses LZ4 chunks, but lz4 is not on PATH.")
-        process = subprocess.run([lz4_path, "-d", "-c"], input=payload, capture_output=True, check=False)
+        process = subprocess.run(
+            [lz4_path, "-d", "-c"], input=payload, capture_output=True, check=False
+        )
         if process.returncode:
             raise RuntimeError(process.stderr.decode("utf-8", errors="replace"))
         return process.stdout
@@ -312,12 +345,19 @@ def _iter_messages(chunk: bytes) -> Iterable[tuple[int, int, bytes]]:
 
 def _message_timestamp(message: Any, fallback_log_time_ns: int) -> float:
     if message.timestamp.seconds or message.timestamp.nanos:
-        return float(message.timestamp.seconds) + float(message.timestamp.nanos) / 1_000_000_000
+        return (
+            float(message.timestamp.seconds)
+            + float(message.timestamp.nanos) / 1_000_000_000
+        )
     return fallback_log_time_ns / 1_000_000_000
 
 
 def _estimate_fps(log_times_ns: list[int]) -> float:
-    deltas = [(log_times_ns[index] - log_times_ns[index - 1]) / 1_000_000_000 for index in range(1, len(log_times_ns)) if log_times_ns[index] > log_times_ns[index - 1]]
+    deltas = [
+        (log_times_ns[index] - log_times_ns[index - 1]) / 1_000_000_000
+        for index in range(1, len(log_times_ns))
+        if log_times_ns[index] > log_times_ns[index - 1]
+    ]
     return 1.0 / statistics.median(deltas) if deltas else DEFAULT_FPS
 
 
@@ -325,7 +365,13 @@ def _nal_types(data: bytes) -> set[int]:
     types: set[int] = set()
     index = 0
     while index < len(data) - 3:
-        start_length = 3 if data[index:index + 3] == b"\x00\x00\x01" else 4 if data[index:index + 4] == b"\x00\x00\x00\x01" else 0
+        start_length = (
+            3
+            if data[index : index + 3] == b"\x00\x00\x01"
+            else 4
+            if data[index : index + 4] == b"\x00\x00\x00\x01"
+            else 0
+        )
         if not start_length:
             index += 1
             continue
@@ -356,23 +402,74 @@ def _write_packet(writer: _BitstreamWriter, data: bytes) -> None:
     writer.packet_count += 1
 
 
-def _mux_h264(ffmpeg_path: str, raw_path: Path, output_path: Path, fps: float, overwrite: bool) -> None:
-    process = subprocess.run([ffmpeg_path, "-y" if overwrite else "-n", "-hide_banner", "-loglevel", "error", "-fflags", "+genpts", "-f", "h264", "-r", f"{fps:.6f}", "-i", str(raw_path), "-c:v", "copy", "-movflags", "+faststart", str(output_path)], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
+def _mux_h264(
+    ffmpeg_path: str, raw_path: Path, output_path: Path, fps: float, overwrite: bool
+) -> None:
+    process = subprocess.run(
+        [
+            ffmpeg_path,
+            "-y" if overwrite else "-n",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-fflags",
+            "+genpts",
+            "-f",
+            "h264",
+            "-r",
+            f"{fps:.6f}",
+            "-i",
+            str(raw_path),
+            "-c:v",
+            "copy",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
     if process.returncode:
         raise RuntimeError(process.stdout)
 
 
-def _read_u16(data: bytes, offset: int) -> tuple[int, int]: return struct.unpack_from("<H", data, offset)[0], offset + 2
-def _read_u32(data: bytes, offset: int) -> tuple[int, int]: return struct.unpack_from("<I", data, offset)[0], offset + 4
-def _read_u64(data: bytes, offset: int) -> tuple[int, int]: return struct.unpack_from("<Q", data, offset)[0], offset + 8
+def _read_u16(data: bytes, offset: int) -> tuple[int, int]:
+    return struct.unpack_from("<H", data, offset)[0], offset + 2
+
+
+def _read_u32(data: bytes, offset: int) -> tuple[int, int]:
+    return struct.unpack_from("<I", data, offset)[0], offset + 4
+
+
+def _read_u64(data: bytes, offset: int) -> tuple[int, int]:
+    return struct.unpack_from("<Q", data, offset)[0], offset + 8
+
+
 def _read_string(data: bytes, offset: int) -> tuple[str, int]:
-    length, offset = _read_u32(data, offset); return data[offset:offset + length].decode("utf-8", errors="replace"), offset + length
+    length, offset = _read_u32(data, offset)
+    return data[offset : offset + length].decode(
+        "utf-8", errors="replace"
+    ), offset + length
+
+
 def _read_bytes32(data: bytes, offset: int) -> tuple[bytes, int]:
-    length, offset = _read_u32(data, offset); return data[offset:offset + length], offset + length
+    length, offset = _read_u32(data, offset)
+    return data[offset : offset + length], offset + length
+
+
 def _read_bytes64(data: bytes, offset: int) -> tuple[bytes, int]:
-    length, offset = _read_u64(data, offset); return data[offset:offset + length], offset + length
+    length, offset = _read_u64(data, offset)
+    return data[offset : offset + length], offset + length
+
+
 def _read_u16_u64_map(data: bytes, offset: int) -> tuple[dict[int, int], int]:
-    length, offset = _read_u32(data, offset); end = offset + length; values: dict[int, int] = {}
+    length, offset = _read_u32(data, offset)
+    end = offset + length
+    values: dict[int, int] = {}
     while offset < end:
-        key, offset = _read_u16(data, offset); value, offset = _read_u64(data, offset); values[key] = value
+        key, offset = _read_u16(data, offset)
+        value, offset = _read_u64(data, offset)
+        values[key] = value
     return values, offset

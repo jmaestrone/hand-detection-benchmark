@@ -7,9 +7,10 @@ import json
 import shutil
 import tempfile
 import urllib.request
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 
@@ -67,15 +68,22 @@ def download_wilor_detector(
     """Download the upstream WiLoR detector and write reproducibility metadata."""
     if detector_path.exists() and not overwrite:
         if metadata_path.exists():
-            return DetectorDownloadResult(**json.loads(metadata_path.read_text(encoding="utf-8")))
+            return DetectorDownloadResult(
+                **json.loads(metadata_path.read_text(encoding="utf-8"))
+            )
         raise FileExistsError(
             f"Detector exists without metadata; pass --overwrite: {detector_path}"
         )
     detector_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(dir=detector_path.parent, delete=False) as temporary_file:
+    with tempfile.NamedTemporaryFile(
+        dir=detector_path.parent, delete=False
+    ) as temporary_file:
         temporary_path = Path(temporary_file.name)
     try:
-        with urllib.request.urlopen(source_url) as response, temporary_path.open("wb") as output:
+        with (
+            urllib.request.urlopen(source_url) as response,
+            temporary_path.open("wb") as output,
+        ):
             shutil.copyfileobj(response, output)
         result = DetectorDownloadResult(
             detector_path=str(detector_path),
@@ -84,7 +92,10 @@ def download_wilor_detector(
             byte_count=temporary_path.stat().st_size,
         )
         temporary_path.replace(detector_path)
-        metadata_path.write_text(json.dumps(asdict(result), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        metadata_path.write_text(
+            json.dumps(asdict(result), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
         return result
     finally:
         temporary_path.unlink(missing_ok=True)
@@ -117,7 +128,9 @@ def predict_wilor_frames(
     frame_paths = [frames_dir / str(record["output_path"]) for record in records]
     missing_frames = [path for path in frame_paths if not path.is_file()]
     if missing_frames:
-        raise ValueError(f"Frame metadata references missing image: {missing_frames[0]}")
+        raise ValueError(
+            f"Frame metadata references missing image: {missing_frames[0]}"
+        )
 
     from ultralytics import YOLO
 
@@ -126,15 +139,21 @@ def predict_wilor_frames(
     resolved_device = resolve_device(device)
     predictions: list[FramePrediction] = []
     preview_count = 0
-    for record_batch, path_batch in batched(list(zip(records, frame_paths, strict=True)), batch_size):
+    for record_batch, path_batch in batched(
+        list(zip(records, frame_paths, strict=True)), batch_size
+    ):
         results = model.predict(
             source=[str(path) for path in path_batch],
             conf=confidence,
             device=resolved_device,
             verbose=False,
         )
-        for record, frame_path, result in zip(record_batch, path_batch, results, strict=True):
-            detections = detections_from_result(result, int(record["width"]), int(record["height"]))
+        for record, frame_path, result in zip(
+            record_batch, path_batch, results, strict=True
+        ):
+            detections = detections_from_result(
+                result, int(record["width"]), int(record["height"])
+            )
             prediction = FramePrediction(
                 file_name=str(record["file_name"]),
                 source_video=str(record["source_video"]),
@@ -151,16 +170,30 @@ def predict_wilor_frames(
             )
             predictions.append(prediction)
             if preview_dir is not None and preview_count < max_previews:
-                write_preview(frame_path, prediction, preview_dir / prediction.file_name)
+                write_preview(
+                    frame_path, prediction, preview_dir / prediction.file_name
+                )
                 preview_count += 1
-    write_jsonl(output_path, (frame_prediction_to_record(prediction) for prediction in predictions))
-    return len(predictions), sum(len(item.detections) for item in predictions), preview_count
+    write_jsonl(
+        output_path,
+        (frame_prediction_to_record(prediction) for prediction in predictions),
+    )
+    return (
+        len(predictions),
+        sum(len(item.detections) for item in predictions),
+        preview_count,
+    )
 
 
 def validate_wilor_class_names(model_names: Any) -> None:
     """Reject a weight file whose ordered class mapping is not WiLoR left/right."""
-    names = model_names if isinstance(model_names, dict) else dict(enumerate(model_names))
-    normalized = {int(index): str(name).lower().replace("_", " ").strip() for index, name in names.items()}
+    names = (
+        model_names if isinstance(model_names, dict) else dict(enumerate(model_names))
+    )
+    normalized = {
+        int(index): str(name).lower().replace("_", " ").strip()
+        for index, name in names.items()
+    }
     expected = {0: {"left", "left hand"}, 1: {"right", "right hand"}}
     if any(normalized.get(index) not in allowed for index, allowed in expected.items()):
         raise ValueError(f"Unexpected WiLoR class mapping: {normalized}")
@@ -179,10 +212,22 @@ def detections_from_result(result: Any, width: int, height: int) -> list[HandDet
         if category_id not in WILOR_CLASS_TO_CATEGORY:
             raise ValueError(f"Unexpected WiLoR class id: {category_id}")
         x1, y1, x2, y2 = np.asarray(box, dtype=float)
-        clipped = [max(0.0, min(x1, width)), max(0.0, min(y1, height)), max(0.0, min(x2, width)), max(0.0, min(y2, height))]
+        clipped = [
+            max(0.0, min(x1, width)),
+            max(0.0, min(y1, height)),
+            max(0.0, min(x2, width)),
+            max(0.0, min(y2, height)),
+        ]
         if clipped[2] <= clipped[0] or clipped[3] <= clipped[1]:
             continue
-        detections.append(HandDetection(WILOR_CLASS_TO_CATEGORY[category_id], category_id, float(confidence), clipped))
+        detections.append(
+            HandDetection(
+                WILOR_CLASS_TO_CATEGORY[category_id],
+                category_id,
+                float(confidence),
+                clipped,
+            )
+        )
     return detections
 
 
@@ -203,10 +248,15 @@ def resolve_device(device: str) -> str:
 
 def frame_prediction_to_record(prediction: FramePrediction) -> dict[str, Any]:
     """Serialize a prediction while keeping detections as portable JSON objects."""
-    return {**asdict(prediction), "detections": [asdict(item) for item in prediction.detections]}
+    return {
+        **asdict(prediction),
+        "detections": [asdict(item) for item in prediction.detections],
+    }
 
 
-def write_preview(frame_path: Path, prediction: FramePrediction, output_path: Path) -> None:
+def write_preview(
+    frame_path: Path, prediction: FramePrediction, output_path: Path
+) -> None:
     """Write an annotated preview image for manual detector sanity checks."""
     import cv2
 
@@ -218,7 +268,16 @@ def write_preview(frame_path: Path, prediction: FramePrediction, output_path: Pa
         x1, y1, x2, y2 = (round(value) for value in detection.bbox_xyxy)
         color = colors[detection.category]
         cv2.rectangle(image, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(image, f"{detection.category} {detection.confidence:.2f}", (x1, max(16, y1 - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
+        cv2.putText(
+            image,
+            f"{detection.category} {detection.confidence:.2f}",
+            (x1, max(16, y1 - 5)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.45,
+            color,
+            1,
+            cv2.LINE_AA,
+        )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if not cv2.imwrite(str(output_path), image):
         raise RuntimeError(f"Could not write preview: {output_path}")
@@ -226,7 +285,11 @@ def write_preview(frame_path: Path, prediction: FramePrediction, output_path: Pa
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     """Read JSONL records from the benchmark's existing metadata format."""
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line
+    ]
 
 
 def write_jsonl(path: Path, records: Iterable[dict[str, Any]]) -> None:
@@ -246,8 +309,10 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def batched(values: list[tuple[dict[str, Any], Path]], batch_size: int) -> Iterable[tuple[list[dict[str, Any]], list[Path]]]:
+def batched(
+    values: list[tuple[dict[str, Any], Path]], batch_size: int
+) -> Iterable[tuple[list[dict[str, Any]], list[Path]]]:
     """Yield parallel metadata and image-path batches."""
     for start in range(0, len(values), batch_size):
-        batch = values[start:start + batch_size]
+        batch = values[start : start + batch_size]
         yield [record for record, _ in batch], [path for _, path in batch]

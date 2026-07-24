@@ -15,6 +15,7 @@ __pycache__/
 /data/predictions/
 /data/roboflow-export/
 /data/benchmark/
+/data/evaluation/
 /data/training/
 /models/
 /runs/

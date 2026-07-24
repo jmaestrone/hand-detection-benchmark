@@ -13,6 +13,12 @@ DEFAULT_WILOR_DETECTOR_PATH = DEFAULT_MODEL_DIR / "detector.pt"
 DEFAULT_WILOR_DETECTOR_METADATA_PATH = DEFAULT_MODEL_DIR / "detector.metadata.json"
 DEFAULT_PREDICTIONS_PATH = Path("data/predictions/wilor-detector.jsonl")
 DEFAULT_ROBOFLOW_EXPORT_DIR = Path("data/roboflow-export/wilor-detector-yolo")
+DEFAULT_EVALUATION_DATASET_DIR = Path(
+    "data/evaluation/head-left-hand-detection-ground-v3"
+)
+DEFAULT_AUDIT_RUN_DIR = Path("runs/audits/head-left-v3-wilor-vs-rfdetr")
+DEFAULT_RFDETR_WEIGHTS_PATH = Path("models/rfdetr/checkpoint_best_total.pth")
+DEFAULT_BENCHMARK_INFERENCE_CONFIDENCE = 0.005
 DEFAULT_WILOR_DETECTOR_URL = (
     "https://huggingface.co/spaces/rolpotamias/WiLoR/resolve/main/"
     "pretrained_models/detector.pt"

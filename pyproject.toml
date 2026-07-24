@@ -7,11 +7,16 @@ requires-python = ">=3.12"
 dependencies = [
     "dill>=0.3.8",
     "numpy>=2.0.0",
+    "opencv-python>=4.10.0",
     "protobuf>=5.0.0",
+    "pycocotools>=2.0.10",
     "typer>=0.12.0",
     "ultralytics>=8.4.0",
     "zstandard>=0.23.0",
 ]
+
+[project.optional-dependencies]
+rfdetr = ["rfdetr==1.8.3"]
 
 [project.scripts]
 hand-benchmark = "hand_benchmark.cli:app"
@@ -24,4 +29,7 @@ build-backend = "hatchling.build"
 packages = ["src/hand_benchmark"]
 
 [dependency-groups]
-dev = ["pytest>=8.0.0"]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.16.0",
+]
