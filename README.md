@@ -20,12 +20,12 @@ uv run hand-benchmark export-head-left-videos \
 uv run hand-benchmark extract-frames
 ```
 
-Create WiLoR pre-labels for Roboflow:
+Create RF-DETR pre-labels for Roboflow:
 
 ```bash
-uv run hand-benchmark download-wilor-detector
-uv run hand-benchmark predict-hands
-uv run hand-benchmark export-roboflow-yolo
+uv run hand-benchmark predict-rfdetr-frames \
+  --weights-path /path/to/checkpoint_best_total.pth
+uv run hand-benchmark export-rfdetr-roboflow-yolo
 ```
 
 Compare WiLoR and RF-DETR on a reviewed COCO export:
@@ -47,7 +47,7 @@ open runs/audits/head-left-v3-wilor-vs-rfdetr/review/index.html
 
 ## Documentation
 
-- [Corpus extraction and WiLoR pre-labeling](docs/corpus-and-prelabels.md)
+- [Corpus extraction and model pre-labeling](docs/corpus-and-prelabels.md)
 - [Model evaluation and metrics](docs/evaluation.md)
 - [Local annotation review](docs/local-review.md)
 - [Corrected dataset revisions](docs/dataset-revisions.md)

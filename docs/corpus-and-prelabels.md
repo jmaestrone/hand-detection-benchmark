@@ -1,4 +1,4 @@
-# Corpus extraction and WiLoR pre-labeling
+# Corpus extraction and model pre-labeling
 
 ## Dataset identity
 
@@ -58,7 +58,54 @@ uv run hand-benchmark export-head-left-videos \
 
 The same `--start-index` and `--limit` pattern is available for frame extraction.
 
-## Generate WiLoR pre-labels
+## Generate RF-DETR pre-labels
+
+RF-DETR is the recommended pre-labeler after outperforming WiLoR on the reviewed v3 dataset. It uses the validation-selected F2 operating point of `0.25` by default.
+
+The imported reviewed COCO dataset is also used to reconstruct the checkpoint's classifier slots safely:
+
+```bash
+uv run hand-benchmark predict-rfdetr-frames \
+  --weights-path /path/to/checkpoint_best_total.pth \
+  --limit 20 \
+  --preview-dir runs/previews/rfdetr
+```
+
+Review the smoke previews, then process every extracted frame:
+
+```bash
+uv run hand-benchmark predict-rfdetr-frames \
+  --weights-path /path/to/checkpoint_best_total.pth
+```
+
+Default outputs:
+
+```text
+data/predictions/rfdetr-checkpoint-best-total.jsonl
+data/predictions/rfdetr-checkpoint-best-total.latency.json
+```
+
+The command writes exactly one prediction row per frame, including negatives, and records checkpoint, class-slot, device, threshold, and latency provenance.
+
+For new recording domains, consider a lower `--confidence` if recall is more important than the amount of manual cleanup.
+
+Export the RF-DETR predictions:
+
+```bash
+uv run hand-benchmark export-rfdetr-roboflow-yolo
+```
+
+This writes:
+
+```text
+data/roboflow-export/rfdetr-checkpoint-best-total-yolo/
+```
+
+Its manifest retains the prediction model, operating threshold, and checkpoint SHA-256 alongside the frame provenance.
+
+Do not treat performance on frames already used to train RF-DETR as an independent evaluation. This command is intended to accelerate annotation of new extracted frames; benchmark metrics must still use recording-disjoint reviewed data.
+
+## Generate WiLoR baseline pre-labels
 
 Download the upstream left/right YOLO detector:
 
@@ -82,7 +129,7 @@ uv run hand-benchmark predict-hands
 
 The JSONL output contains one row for every frame, including images with no detections.
 
-## Export to Roboflow
+## Export WiLoR to Roboflow
 
 ```bash
 uv run hand-benchmark export-roboflow-yolo

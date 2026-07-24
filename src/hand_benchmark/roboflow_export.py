@@ -1,4 +1,4 @@
-"""Export WiLoR pre-labels as a Roboflow-importable YOLO detection dataset."""
+"""Export canonical hand pre-labels as a Roboflow-importable YOLO dataset."""
 
 from __future__ import annotations
 
@@ -32,12 +32,12 @@ def export_roboflow_yolo(
     output_dir: Path,
     overwrite: bool = False,
 ) -> RoboflowExportResult:
-    """Create a YOLO dataset folder from frame metadata and WiLoR predictions.
+    """Create a YOLO dataset folder from frame metadata and model predictions.
 
     Images are hard-linked where the filesystem permits, so the export remains
     uploadable without duplicating the raw frame pixels. Empty label files are
-    written for frames where WiLoR found no hands; they are intentional negative
-    examples, not missing labels.
+    written for frames where the selected model found no hands; they are
+    intentional negative examples, not missing labels.
     """
     frame_records = read_jsonl(frame_metadata_path)
     prediction_records = read_jsonl(predictions_path)
@@ -83,6 +83,12 @@ def export_roboflow_yolo(
                 "source_mcap_stem": frame_record["source_mcap_stem"],
                 "source_video": frame_record["source_video"],
                 "timestamp_seconds": frame_record["timestamp_seconds"],
+                "prediction_model": prediction_record.get("model_name"),
+                "prediction_threshold": prediction_record.get(
+                    "confidence_threshold",
+                    prediction_record.get("inference_floor"),
+                ),
+                "checkpoint_sha256": prediction_record.get("checkpoint_sha256"),
                 "detection_count": len(label_lines),
             }
         )

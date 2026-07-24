@@ -19,6 +19,8 @@ Run CLI help:
 
 ```bash
 uv run hand-benchmark --help
+uv run hand-benchmark predict-rfdetr-frames --help
+uv run hand-benchmark export-rfdetr-roboflow-yolo --help
 uv run hand-benchmark <command> --help
 ```
 
