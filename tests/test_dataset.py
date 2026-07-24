@@ -59,10 +59,17 @@ def test_extract_frames_rejects_cached_video_without_provenance(tmp_path: Path) 
     (video_dir / "source.mp4").touch()
 
     with pytest.raises(ValueError, match="Missing MCAP provenance"):
-        extract_frames(video_dir, tmp_path / "missing.jsonl", tmp_path / "frames", tmp_path / "frames.jsonl")
+        extract_frames(
+            video_dir,
+            tmp_path / "missing.jsonl",
+            tmp_path / "frames",
+            tmp_path / "frames.jsonl",
+        )
 
 
-def test_frame_extraction_start_index_selects_a_later_video(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_frame_extraction_start_index_selects_a_later_video(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     video_dir = tmp_path / "videos"
     video_dir.mkdir()
     for name in ("first.mp4", "second.mp4"):
@@ -71,16 +78,23 @@ def test_frame_extraction_start_index_selects_a_later_video(tmp_path: Path, monk
         "\n".join(
             f'{{"output_video_path":"{name}","source_mcap_path":"/{name}.mcap","source_mcap_stem":"{name}","video_topic":"/head_left/video"}}'
             for name in ("first.mp4", "second.mp4")
-        ) + "\n"
+        )
+        + "\n"
     )
     monkeypatch.setattr(
         "hand_benchmark.dataset.probe_video",
         lambda path: VideoInfo(path, 10, 10, 1.0, 1.0, 1),
     )
-    monkeypatch.setattr("hand_benchmark.dataset.extract_video_frames", lambda *args: None)
+    monkeypatch.setattr(
+        "hand_benchmark.dataset.extract_video_frames", lambda *args: None
+    )
 
     video_count, frame_count = extract_frames(
-        video_dir, video_dir / "metadata.jsonl", tmp_path / "frames", tmp_path / "frames.jsonl", start_index=1
+        video_dir,
+        video_dir / "metadata.jsonl",
+        tmp_path / "frames",
+        tmp_path / "frames.jsonl",
+        start_index=1,
     )
 
     assert (video_count, frame_count) == (1, 1)

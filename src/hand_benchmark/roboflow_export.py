@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import os
 import shutil
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from hand_benchmark.wilor import LEFT_HAND_CATEGORY, RIGHT_HAND_CATEGORY
 
@@ -48,11 +49,15 @@ def export_roboflow_yolo(
     images_dir.mkdir(parents=True, exist_ok=True)
     labels_dir.mkdir(parents=True, exist_ok=True)
 
-    predictions_by_filename = {str(record["file_name"]): record for record in prediction_records}
+    predictions_by_filename = {
+        str(record["file_name"]): record for record in prediction_records
+    }
     manifest_records: list[dict[str, Any]] = []
     detection_count = 0
     empty_label_count = 0
-    for frame_record in sorted(frame_records, key=lambda record: str(record["file_name"])):
+    for frame_record in sorted(
+        frame_records, key=lambda record: str(record["file_name"])
+    ):
         file_name = str(frame_record["file_name"])
         image_source = frames_dir / file_name
         image_target = images_dir / file_name
@@ -61,20 +66,26 @@ def export_roboflow_yolo(
         prediction_record = predictions_by_filename[file_name]
         label_target = labels_dir / f"{Path(file_name).stem}.txt"
         label_lines = yolo_label_lines(prediction_record)
-        write_text(label_target, "\n".join(label_lines) + ("\n" if label_lines else ""), overwrite)
+        write_text(
+            label_target,
+            "\n".join(label_lines) + ("\n" if label_lines else ""),
+            overwrite,
+        )
         detection_count += len(label_lines)
         if not label_lines:
             empty_label_count += 1
-        manifest_records.append({
-            "file_name": file_name,
-            "image_path": (Path("images") / "train" / file_name).as_posix(),
-            "label_path": (Path("labels") / "train" / label_target.name).as_posix(),
-            "source_mcap_path": frame_record["source_mcap_path"],
-            "source_mcap_stem": frame_record["source_mcap_stem"],
-            "source_video": frame_record["source_video"],
-            "timestamp_seconds": frame_record["timestamp_seconds"],
-            "detection_count": len(label_lines),
-        })
+        manifest_records.append(
+            {
+                "file_name": file_name,
+                "image_path": (Path("images") / "train" / file_name).as_posix(),
+                "label_path": (Path("labels") / "train" / label_target.name).as_posix(),
+                "source_mcap_path": frame_record["source_mcap_path"],
+                "source_mcap_stem": frame_record["source_mcap_stem"],
+                "source_video": frame_record["source_video"],
+                "timestamp_seconds": frame_record["timestamp_seconds"],
+                "detection_count": len(label_lines),
+            }
+        )
 
     write_text(output_dir / "data.yaml", yolo_data_yaml(), overwrite)
     write_jsonl(output_dir / "manifest.jsonl", manifest_records, overwrite)
@@ -91,7 +102,9 @@ def yolo_label_lines(prediction_record: dict[str, Any]) -> list[str]:
     width = int(prediction_record["width"])
     height = int(prediction_record["height"])
     if width <= 0 or height <= 0:
-        raise ValueError(f"Prediction has invalid dimensions: {prediction_record['file_name']}")
+        raise ValueError(
+            f"Prediction has invalid dimensions: {prediction_record['file_name']}"
+        )
     lines: list[str] = []
     for detection in prediction_record["detections"]:
         category = str(detection["category"])
@@ -103,9 +116,15 @@ def yolo_label_lines(prediction_record: dict[str, Any]) -> list[str]:
         box_width = x2 - x1
         box_height = y2 - y1
         if box_width <= 0 or box_height <= 0:
-            raise ValueError(f"Prediction has an empty bounding box: {prediction_record['file_name']}")
-        center_x, box_width = serialized_yolo_axis((x1 + x2) / 2 / width, box_width / width)
-        center_y, box_height = serialized_yolo_axis((y1 + y2) / 2 / height, box_height / height)
+            raise ValueError(
+                f"Prediction has an empty bounding box: {prediction_record['file_name']}"
+            )
+        center_x, box_width = serialized_yolo_axis(
+            (x1 + x2) / 2 / width, box_width / width
+        )
+        center_y, box_height = serialized_yolo_axis(
+            (y1 + y2) / 2 / height, box_height / height
+        )
         lines.append(
             f"{YOLO_CLASS_IDS[category]} {center_x:.6f} {center_y:.6f} "
             f"{box_width:.6f} {box_height:.6f}"
@@ -118,7 +137,9 @@ def serialized_yolo_axis(center: float, span: float) -> tuple[float, float]:
     rounded_center = round(center, 6)
     rounded_span = round(span, 6)
     precision_step = 0.000001
-    while rounded_center - rounded_span / 2 < 0 or rounded_center + rounded_span / 2 > 1:
+    while (
+        rounded_center - rounded_span / 2 < 0 or rounded_center + rounded_span / 2 > 1
+    ):
         rounded_span = round(rounded_span - precision_step, 6)
         if rounded_span <= 0:
             raise ValueError("YOLO box became empty after serialization")
@@ -146,7 +167,9 @@ def validate_input_records(
             "Frame and prediction records do not match: "
             f"missing={len(missing_predictions)}, extra={len(extra_predictions)}"
         )
-    missing_images = [file_name for file_name in frame_names if not (frames_dir / file_name).is_file()]
+    missing_images = [
+        file_name for file_name in frame_names if not (frames_dir / file_name).is_file()
+    ]
     if missing_images:
         raise ValueError(f"Frame images are missing: {len(missing_images)}")
 
@@ -154,7 +177,9 @@ def validate_input_records(
 def ensure_output_is_writable(output_dir: Path, overwrite: bool) -> None:
     """Protect an existing export until the caller explicitly requests replacement."""
     if output_dir.exists() and any(output_dir.iterdir()) and not overwrite:
-        raise FileExistsError(f"Export directory already contains files: {output_dir}. Pass --overwrite.")
+        raise FileExistsError(
+            f"Export directory already contains files: {output_dir}. Pass --overwrite."
+        )
 
 
 def link_or_copy_image(source_path: Path, target_path: Path) -> None:
@@ -162,7 +187,9 @@ def link_or_copy_image(source_path: Path, target_path: Path) -> None:
     if target_path.exists():
         if os.path.samefile(source_path, target_path):
             return
-        raise FileExistsError(f"Export image already exists and differs from source: {target_path}")
+        raise FileExistsError(
+            f"Export image already exists and differs from source: {target_path}"
+        )
     try:
         os.link(source_path, target_path)
     except OSError:
@@ -172,26 +199,36 @@ def link_or_copy_image(source_path: Path, target_path: Path) -> None:
 def write_text(path: Path, content: str, overwrite: bool) -> None:
     """Write a generated text artifact without implicitly replacing one."""
     if path.exists() and not overwrite:
-        raise FileExistsError(f"Export artifact already exists: {path}. Pass --overwrite.")
+        raise FileExistsError(
+            f"Export artifact already exists: {path}. Pass --overwrite."
+        )
     path.write_text(content, encoding="utf-8")
 
 
 def yolo_data_yaml() -> str:
     """Return the stable two-class data.yaml required by the annotation schema."""
-    return "path: .\ntrain: images/train\nnc: 2\nnames:\n  0: left_hand\n  1: right_hand\n"
+    return (
+        "path: .\ntrain: images/train\nnc: 2\nnames:\n  0: left_hand\n  1: right_hand\n"
+    )
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     """Read JSONL records and fail clearly when a required input is absent."""
     if not path.is_file():
         raise ValueError(f"Required JSONL file does not exist: {path}")
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line
+    ]
 
 
 def write_jsonl(path: Path, records: Iterable[dict[str, Any]], overwrite: bool) -> None:
     """Write a deterministic JSONL export manifest."""
     if path.exists() and not overwrite:
-        raise FileExistsError(f"Export artifact already exists: {path}. Pass --overwrite.")
+        raise FileExistsError(
+            f"Export artifact already exists: {path}. Pass --overwrite."
+        )
     with path.open("w", encoding="utf-8") as handle:
         for record in records:
             handle.write(json.dumps(record, sort_keys=True) + "\n")

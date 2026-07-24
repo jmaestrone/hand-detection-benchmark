@@ -1,7 +1,5 @@
 """Tests for WiLoR detector metadata and raw prediction normalization."""
 
-from pathlib import Path
-
 import pytest
 
 from hand_benchmark.wilor import detections_from_result, validate_wilor_class_names
