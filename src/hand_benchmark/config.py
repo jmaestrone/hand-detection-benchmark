@@ -18,6 +18,13 @@ DEFAULT_EVALUATION_DATASET_DIR = Path(
 )
 DEFAULT_AUDIT_RUN_DIR = Path("runs/audits/head-left-v3-wilor-vs-rfdetr")
 DEFAULT_RFDETR_WEIGHTS_PATH = Path("models/rfdetr/checkpoint_best_total.pth")
+DEFAULT_RFDETR_FRAME_PREDICTIONS_PATH = Path(
+    "data/predictions/rfdetr-checkpoint-best-total.jsonl"
+)
+DEFAULT_RFDETR_PRELABEL_CONFIDENCE = 0.25
+DEFAULT_RFDETR_ROBOFLOW_EXPORT_DIR = Path(
+    "data/roboflow-export/rfdetr-checkpoint-best-total-yolo"
+)
 DEFAULT_BENCHMARK_INFERENCE_CONFIDENCE = 0.005
 DEFAULT_WILOR_DETECTOR_URL = (
     "https://huggingface.co/spaces/rolpotamias/WiLoR/resolve/main/"

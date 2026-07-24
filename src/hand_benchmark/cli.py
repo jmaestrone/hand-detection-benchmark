@@ -11,6 +11,7 @@ import typer
 from hand_benchmark.benchmark_inference import (
     parse_split_names,
     predict_rfdetr_coco,
+    predict_rfdetr_frames,
     predict_wilor_coco,
 )
 from hand_benchmark.coco_dataset import import_coco_dataset
@@ -23,6 +24,9 @@ from hand_benchmark.config import (
     DEFAULT_FRAME_METADATA_PATH,
     DEFAULT_FRAMES_DIR,
     DEFAULT_PREDICTIONS_PATH,
+    DEFAULT_RFDETR_FRAME_PREDICTIONS_PATH,
+    DEFAULT_RFDETR_PRELABEL_CONFIDENCE,
+    DEFAULT_RFDETR_ROBOFLOW_EXPORT_DIR,
     DEFAULT_RFDETR_WEIGHTS_PATH,
     DEFAULT_ROBOFLOW_EXPORT_DIR,
     DEFAULT_VIDEO_DIR,
@@ -220,6 +224,75 @@ def predict_rfdetr_coco_command(
         typer.echo(f"{split_name}: {output_path}")
 
 
+@app.command("predict-rfdetr-frames")
+def predict_rfdetr_frames_command(
+    frames_dir: Annotated[
+        Path, typer.Option(help="Directory containing extracted frame images.")
+    ] = DEFAULT_FRAMES_DIR,
+    frame_metadata_path: Annotated[
+        Path, typer.Option(help="Frame provenance JSONL path.")
+    ] = DEFAULT_FRAME_METADATA_PATH,
+    class_schema_dataset_root: Annotated[
+        Path,
+        typer.Option(
+            help="Imported COCO dataset used to reconstruct classifier slots."
+        ),
+    ] = DEFAULT_EVALUATION_DATASET_DIR,
+    weights_path: Annotated[
+        Path, typer.Option(help="Self-describing RF-DETR checkpoint.")
+    ] = DEFAULT_RFDETR_WEIGHTS_PATH,
+    output_path: Annotated[
+        Path, typer.Option(help="Ignored JSONL destination for RF-DETR pre-labels.")
+    ] = DEFAULT_RFDETR_FRAME_PREDICTIONS_PATH,
+    confidence: Annotated[
+        float,
+        typer.Option(
+            min=0.0,
+            max=1.0,
+            help="Pre-label confidence threshold; defaults to validated F2 point.",
+        ),
+    ] = DEFAULT_RFDETR_PRELABEL_CONFIDENCE,
+    device: Annotated[
+        str, typer.Option(help="Inference device: auto, mps, cuda, or cpu.")
+    ] = "auto",
+    batch_size: Annotated[
+        int, typer.Option(min=1, help="Images per inference batch.")
+    ] = 4,
+    limit: Annotated[
+        int | None, typer.Option(min=1, help="Optional smoke-test frame limit.")
+    ] = None,
+    preview_dir: Annotated[
+        Path | None, typer.Option(help="Optional annotated-preview directory.")
+    ] = None,
+    max_previews: Annotated[
+        int, typer.Option(min=0, help="Maximum preview images to write.")
+    ] = 20,
+) -> None:
+    """Pre-label extracted frames with the reviewed RF-DETR checkpoint."""
+    try:
+        image_count, detection_count, preview_count = predict_rfdetr_frames(
+            frames_dir=frames_dir,
+            frame_metadata_path=frame_metadata_path,
+            class_schema_dataset_root=class_schema_dataset_root,
+            weights_path=weights_path,
+            output_path=output_path,
+            confidence=confidence,
+            device=device,
+            batch_size=batch_size,
+            limit=limit,
+            preview_dir=preview_dir,
+            max_previews=max_previews,
+        )
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError) as error:
+        raise typer.BadParameter(str(error)) from error
+    typer.echo(
+        f"Wrote {detection_count} detections for {image_count} frames to {output_path}"
+    )
+    typer.echo(f"Latency summary: {output_path.with_suffix('.latency.json')}")
+    if preview_count:
+        typer.echo(f"Preview images: {preview_count} in {preview_dir}")
+
+
 @app.command("import-coco-dataset")
 def import_coco_dataset_command(
     archive_path: Annotated[
@@ -256,7 +329,7 @@ def export_roboflow_yolo_command(
         Path, typer.Option(help="Frame provenance JSONL path.")
     ] = DEFAULT_FRAME_METADATA_PATH,
     predictions_path: Annotated[
-        Path, typer.Option(help="WiLoR prediction JSONL path.")
+        Path, typer.Option(help="Canonical WiLoR or RF-DETR prediction JSONL path.")
     ] = DEFAULT_PREDICTIONS_PATH,
     output_dir: Annotated[
         Path, typer.Option(help="Ignored destination for the YOLO import folder.")
@@ -268,7 +341,46 @@ def export_roboflow_yolo_command(
         ),
     ] = False,
 ) -> None:
-    """Export all frames and WiLoR pre-labels in Roboflow-importable YOLO format."""
+    """Export canonical hand pre-labels in Roboflow-importable YOLO format."""
+    try:
+        result = export_roboflow_yolo(
+            frames_dir,
+            frame_metadata_path,
+            predictions_path,
+            output_dir,
+            overwrite,
+        )
+    except (FileExistsError, OSError, ValueError) as error:
+        raise typer.BadParameter(str(error)) from error
+    typer.echo(
+        f"Exported {result.image_count} images and {result.detection_count} detections "
+        f"to {result.output_dir}"
+    )
+    typer.echo(f"Empty label files: {result.empty_label_count}")
+
+
+@app.command("export-rfdetr-roboflow-yolo")
+def export_rfdetr_roboflow_yolo_command(
+    frames_dir: Annotated[
+        Path, typer.Option(help="Directory containing extracted frame images.")
+    ] = DEFAULT_FRAMES_DIR,
+    frame_metadata_path: Annotated[
+        Path, typer.Option(help="Frame provenance JSONL path.")
+    ] = DEFAULT_FRAME_METADATA_PATH,
+    predictions_path: Annotated[
+        Path, typer.Option(help="RF-DETR frame prediction JSONL path.")
+    ] = DEFAULT_RFDETR_FRAME_PREDICTIONS_PATH,
+    output_dir: Annotated[
+        Path, typer.Option(help="Ignored RF-DETR YOLO export destination.")
+    ] = DEFAULT_RFDETR_ROBOFLOW_EXPORT_DIR,
+    overwrite: Annotated[
+        bool,
+        typer.Option(
+            help="Replace generated labels and manifest in an existing export."
+        ),
+    ] = False,
+) -> None:
+    """Export RF-DETR frame pre-labels for direct Roboflow import."""
     try:
         result = export_roboflow_yolo(
             frames_dir,

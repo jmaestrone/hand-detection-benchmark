@@ -27,7 +27,12 @@ from hand_benchmark.coco_dataset import (
     CocoSplit,
     load_coco_split,
 )
-from hand_benchmark.wilor import file_sha256, resolve_device, validate_wilor_class_names
+from hand_benchmark.wilor import (
+    file_sha256,
+    read_jsonl,
+    resolve_device,
+    validate_wilor_class_names,
+)
 
 
 def predict_wilor_coco(
@@ -132,32 +137,10 @@ def predict_rfdetr_coco(
         raise ValueError("RF-DETR class-slot mapping differs between COCO splits")
     resolved_device = resolve_device(device)
 
-    try:
-        from rfdetr import RFDETR
-    except ImportError as error:
-        raise ImportError(
-            "RF-DETR inference requires `uv sync --extra rfdetr`"
-        ) from error
-    model = RFDETR.from_checkpoint(
-        str(weights_path),
-        device=resolved_device,
-        num_queries=checkpoint_metadata["num_queries"],
-        num_select=checkpoint_metadata["num_select"],
-    )
+    model = _load_rfdetr_model(weights_path, resolved_device, checkpoint_metadata)
 
     def predict_batch(images: list[CocoImage]) -> tuple[list[Any], float]:
-        images_rgb = []
-        for image in images:
-            image_bgr = cv2.imread(str(image.path))
-            if image_bgr is None:
-                raise ValueError(f"Could not read image: {image.path}")
-            images_rgb.append(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
-        started_at = perf_counter()
-        results = model.predict(images_rgb, threshold=confidence)
-        elapsed_ms = (perf_counter() - started_at) * 1000
-        if not isinstance(results, list):
-            results = [results]
-        return results, elapsed_ms
+        return _predict_rfdetr_batch(model, images, confidence)
 
     def normalize(result: Any, image: CocoImage) -> list[NormalizedDetection]:
         boxes = np.asarray(getattr(result, "xyxy", []))
@@ -195,6 +178,117 @@ def predict_rfdetr_coco(
         max_previews=max_previews,
         predict_batch=predict_batch,
         normalize=normalize,
+    )
+
+
+def predict_rfdetr_frames(
+    *,
+    frames_dir: Path,
+    frame_metadata_path: Path,
+    class_schema_dataset_root: Path,
+    weights_path: Path,
+    output_path: Path,
+    confidence: float = 0.25,
+    device: str = "auto",
+    batch_size: int = 4,
+    limit: int | None = None,
+    preview_dir: Path | None = None,
+    max_previews: int = 20,
+) -> tuple[int, int, int]:
+    """Pre-label every extracted frame with the reviewed RF-DETR checkpoint."""
+    _validate_prediction_options(
+        weights_path, confidence, batch_size, limit, max_previews
+    )
+    if not frame_metadata_path.is_file():
+        raise ValueError(f"Frame metadata does not exist: {frame_metadata_path}")
+    frame_records = read_jsonl(frame_metadata_path)
+    if not frame_records:
+        raise ValueError(f"No frame metadata found at {frame_metadata_path}")
+    if limit is not None:
+        frame_records = frame_records[:limit]
+    images = _frame_images_from_metadata(frames_dir, frame_records)
+
+    checkpoint_metadata = read_rfdetr_checkpoint_metadata(weights_path)
+    raw_names = checkpoint_metadata["class_names"]
+    class_slot_mapping = _rfdetr_class_slot_mapping(
+        load_coco_split(class_schema_dataset_root, "train"),
+        raw_names,
+        checkpoint_metadata["classifier_slot_count"],
+    )
+    resolved_device = resolve_device(device)
+    model = _load_rfdetr_model(weights_path, resolved_device, checkpoint_metadata)
+    model_config = {
+        "backend": "rfdetr",
+        "checkpoint": weights_path.name,
+        "class_schema_dataset_root": (class_schema_dataset_root.resolve().as_posix()),
+        "class_slot_mapping": {
+            str(class_id): raw_name for class_id, raw_name in class_slot_mapping.items()
+        },
+        **checkpoint_metadata,
+    }
+
+    predictions: list[NormalizedPrediction] = []
+    inference_times_ms: list[float] = []
+    preview_count = 0
+    for batch in _batched(images, batch_size):
+        results, elapsed_ms = _predict_rfdetr_batch(model, batch, confidence)
+        if len(results) != len(batch):
+            raise ValueError(
+                f"RF-DETR returned {len(results)} results for {len(batch)} frames"
+            )
+        per_image_ms = elapsed_ms / len(batch)
+        for image, result in zip(batch, results, strict=True):
+            detections = _normalize_arrays(
+                boxes=np.asarray(getattr(result, "xyxy", [])),
+                confidences=np.asarray(getattr(result, "confidence", [])),
+                class_ids=np.asarray(getattr(result, "class_id", [])),
+                raw_names=raw_names,
+                image=image,
+                class_id_to_name=class_slot_mapping,
+            )
+            record = frame_records[image.id - 1]
+            predictions.append(
+                NormalizedPrediction(
+                    file_name=image.file_name,
+                    split="frames",
+                    width=image.width,
+                    height=image.height,
+                    source_recording=str(record["source_mcap_stem"]),
+                    timestamp_seconds=float(record["timestamp_seconds"]),
+                    model_name="rfdetr-checkpoint-best-total",
+                    model_config=model_config,
+                    checkpoint_sha256=checkpoint_metadata["checkpoint_sha256"],
+                    device=resolved_device,
+                    inference_floor=confidence,
+                    timing_ms={"inference": round(per_image_ms, 4)},
+                    detections=detections,
+                )
+            )
+            inference_times_ms.append(per_image_ms)
+            if preview_dir is not None and preview_count < max_previews:
+                _write_preview(
+                    image.path,
+                    detections,
+                    preview_dir / image.file_name,
+                )
+                preview_count += 1
+
+    write_predictions(output_path, predictions)
+    _write_latency(
+        output_path.with_suffix(".latency.json"),
+        model_name="rfdetr-checkpoint-best-total",
+        split_name="frames",
+        device=resolved_device,
+        image_count=len(predictions),
+        detection_count=sum(len(row.detections) for row in predictions),
+        inference_times_ms=inference_times_ms,
+        model_config=model_config,
+        checkpoint_sha256=checkpoint_metadata["checkpoint_sha256"],
+    )
+    return (
+        len(predictions),
+        sum(len(prediction.detections) for prediction in predictions),
+        preview_count,
     )
 
 
@@ -338,6 +432,76 @@ def _predict_splits(
         )
         output_paths[split_name] = output_path
     return output_paths
+
+
+def _load_rfdetr_model(
+    weights_path: Path,
+    resolved_device: str,
+    checkpoint_metadata: dict[str, Any],
+) -> Any:
+    """Load RF-DETR with architecture values recovered from its checkpoint."""
+    try:
+        from rfdetr import RFDETR
+    except ImportError as error:
+        raise ImportError(
+            "RF-DETR inference requires `uv sync --extra rfdetr`"
+        ) from error
+    return RFDETR.from_checkpoint(
+        str(weights_path),
+        device=resolved_device,
+        num_queries=checkpoint_metadata["num_queries"],
+        num_select=checkpoint_metadata["num_select"],
+    )
+
+
+def _predict_rfdetr_batch(
+    model: Any,
+    images: list[CocoImage],
+    confidence: float,
+) -> tuple[list[Any], float]:
+    """Read and infer one RF-DETR image batch while measuring model latency."""
+    images_rgb = []
+    for image in images:
+        image_bgr = cv2.imread(str(image.path))
+        if image_bgr is None:
+            raise ValueError(f"Could not read image: {image.path}")
+        images_rgb.append(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
+    started_at = perf_counter()
+    results = model.predict(images_rgb, threshold=confidence)
+    elapsed_ms = (perf_counter() - started_at) * 1000
+    if not isinstance(results, list):
+        results = [results]
+    return results, elapsed_ms
+
+
+def _frame_images_from_metadata(
+    frames_dir: Path, frame_records: list[dict[str, Any]]
+) -> list[CocoImage]:
+    """Validate frame metadata and adapt it to the shared image contract."""
+    images: list[CocoImage] = []
+    file_names: set[str] = set()
+    for image_id, record in enumerate(frame_records, start=1):
+        file_name = str(record["file_name"])
+        if file_name in file_names:
+            raise ValueError(f"Duplicate frame metadata filename: {file_name}")
+        image_path = frames_dir / str(record.get("output_path", file_name))
+        if not image_path.is_file():
+            raise ValueError(f"Frame metadata references missing image: {image_path}")
+        width = int(record["width"])
+        height = int(record["height"])
+        if width <= 0 or height <= 0:
+            raise ValueError(f"Invalid frame dimensions for {file_name}")
+        images.append(
+            CocoImage(
+                id=image_id,
+                file_name=file_name,
+                width=width,
+                height=height,
+                path=image_path,
+            )
+        )
+        file_names.add(file_name)
+    return images
 
 
 def _normalize_arrays(
